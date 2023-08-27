@@ -19,9 +19,6 @@ import java.sql.SQLException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
-import java.util.HashMap;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 import javax.swing.JFileChooser;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
@@ -63,7 +60,6 @@ public class ProducedCarsListView extends javax.swing.JInternalFrame {
     private DialogBox dialogBox;
     private ManufacturersDAO mDAO;
     private ModelsDAO mdDAO;
-    //private RegisterContributorView registerContributorView;
     
     public ProducedCarsListView() {
         try {
@@ -79,7 +75,6 @@ public class ProducedCarsListView extends javax.swing.JInternalFrame {
 
         initComponents();
 
-        //optionsPanel.setBackground(Color.white);
         listTable.setBackground(Color.white);
         listTable.setRowHeight(30);
         listTable.setFont(new Font("Arial", Font.PLAIN, 12));
@@ -281,7 +276,7 @@ public class ProducedCarsListView extends javax.swing.JInternalFrame {
                     
                     try {
                         //Checa se ja possui registro no banco
-                        if (getProducedCarsDAO().checkRecord(chassis.substring(chassis.length() - 6, chassis.length() - 1)))
+                        if (getProducedCarsDAO().checkRecord(chassis.substring(chassis.length() - 5, chassis.length())))
                             continue;
                     } catch (SQLException ex) {
                     }
@@ -357,7 +352,7 @@ public class ProducedCarsListView extends javax.swing.JInternalFrame {
                     properties.add(property);
                     
                     property = new Property();
-                    property.setProperty("employee", Property.PropertyType.STRING, data[5]);
+                    property.setProperty("employee", Property.PropertyType.STRING, data[5].toUpperCase());
                     properties.add(property);
                     
                     property = new Property();
@@ -370,13 +365,13 @@ public class ProducedCarsListView extends javax.swing.JInternalFrame {
                             carForProduction.getClientName());
                     } else {
                          property.setProperty("clientName", Property.PropertyType.STRING, 
-                            data[3]);
+                            data[3].equals("null") ? "" : data[3].toUpperCase());
                     }                   
                     properties.add(property);
 
                     property = new Property();
                     property.setProperty("carIdentification", Property.PropertyType.STRING, 
-                            chassis.substring(chassis.length() - 6, chassis.length() - 1));
+                            chassis.substring(chassis.length() - 5, chassis.length()));
                     properties.add(property);
 
                     propertiesList.add(properties);

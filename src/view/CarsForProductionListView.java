@@ -17,6 +17,9 @@ import java.io.IOException;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.Map;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import javax.swing.JFileChooser;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
@@ -56,6 +59,8 @@ public class CarsForProductionListView extends javax.swing.JInternalFrame {
     private DialogBox dialogBox;
     private ManufacturersDAO mDAO;
     private ModelsDAO mdDAO;
+    private int totalOfPages = 0;
+    private ArrayList<CarForProduction> carsForProduction;
     //private RegisterContributorView registerContributorView;
     
     public CarsForProductionListView() {
@@ -138,6 +143,14 @@ public class CarsForProductionListView extends javax.swing.JInternalFrame {
                 tesseractOCR();
             }                
         });
+        
+        updateListButton.setBackground(Color.decode("#006E96"));
+        updateListButton.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                updateList();
+            }                
+        });
 
         try {
             //Busca lista
@@ -152,31 +165,29 @@ public class CarsForProductionListView extends javax.swing.JInternalFrame {
     private void tesseractOCR() {
         JFileChooser jc = new JFileChooser();
         jc.setDialogTitle("Procurar Arquivo");
+        jc.setMultiSelectionEnabled(true);
         jc.setFileSelectionMode(JFileChooser.FILES_ONLY);
         FileNameExtensionFilter filter = new FileNameExtensionFilter("Pdf", "pdf");
         jc.setFileFilter(filter);
 
         int result = jc.showOpenDialog(getContentPane());
         if (result == JFileChooser.APPROVE_OPTION) {
-            File file = jc.getSelectedFile();
-            String path = file.getPath();
+            File[] files = jc.getSelectedFiles();
 
             File dataDir = new File("tessdata");
             ArrayList<String> dataToSave = new ArrayList<>();
             if (dataDir.exists()) {
                 try {
                     Tesseract instance = new Tesseract();
-                    instance.setDatapath(dataDir.getAbsolutePath());
-                    //instance.setPageSegMode(1);
-                    //instance.setOcrEngineMode(1);
-                    /* START TO DO LOGIC HERE*/
+                    instance.setDatapath(dataDir.getAbsolutePath());                    
 
-                    PDDocument document = PDDocument.load(new File(path));
-                    PDFRenderer pdfRenderer = new PDFRenderer(document);
-
-                    int totalNoOfPages = document.getNumberOfPages();
-                    int imageDPI = 300;
-
+                    Map<String, PDDocument> documents = new HashMap<>();
+                    for (File file : files) {
+                        PDDocument document = PDDocument.load(file);
+                        totalOfPages = totalOfPages + document.getNumberOfPages();
+                        documents.put(file.getName(),document);
+                    }
+                    
                     JFrame frame = new JFrame("Importando Lista");
                     JProgressBar progressBar = new JProgressBar();
                     JLabel label = new JLabel("0%");
@@ -184,7 +195,7 @@ public class CarsForProductionListView extends javax.swing.JInternalFrame {
                     label.setBounds(40, 10, 500, 50);
 
                     progressBar.setMinimum(0);
-                    progressBar.setMaximum(totalNoOfPages);
+                    progressBar.setMaximum(totalOfPages);
 
                     frame.add(progressBar, BorderLayout.CENTER);
                     progressBar.add(label, BorderLayout.CENTER);
@@ -197,80 +208,88 @@ public class CarsForProductionListView extends javax.swing.JInternalFrame {
                     new Thread(() -> {
                         try {
                             int progress = 0;
-                            for (int p = 0; p < totalNoOfPages; p++) { // FOR-EACH PAGE
-                                BufferedImage tempPageBimg = pdfRenderer.renderImageWithDPI(p, imageDPI, ImageType.ARGB);
-                                String text = instance.doOCR(tempPageBimg);
-                                if (!text.contains("SOUH.")) {
-                                    continue;
-                                }
+                            int imageDPI = 300;
+                            PDFRenderer pdfRenderer;
+                            for (Map.Entry<String, PDDocument> m : documents.entrySet()) {
+                                pdfRenderer = new PDFRenderer(m.getValue());
+                                
+                                for (int p = 0; p < m.getValue().getNumberOfPages(); p++) { // FOR-EACH PAGE
+                                    BufferedImage tempPageBimg = pdfRenderer.renderImageWithDPI(p, imageDPI, ImageType.RGB);
+                                    String text = instance.doOCR(tempPageBimg);
+                                    if (!text.contains("SOUH.")) {
+                                        continue;
+                                    }
 
-                                String array = text.split("SOUH.")[1];
+                                    String array = text.split("SOUH.")[1];
 
-                                String clientName;
-                                String s;
-                                String searchClient;
-                                String lastResult = "";
-                                int index = 0;
-                                while (true) {
-                                    try {
-                                        String datas[] = array.split(" ");
-                                        for (String data : datas) {
-                                            if (data.contains(".") && data.length() == 10) {
-                                                index = array.indexOf(data);
+                                    String clientName;
+                                    String s;
+                                    String searchClient;
+                                    String lastResult = "";
+                                    int index = 0;
+                                    while (true) {
+                                        try {
+                                            String datas[] = array.split(" ");
+                                            for (String data : datas) {
+                                                if (data.contains(".") && data.length() == 10) {
+                                                    index = array.indexOf(data);
+                                                    break;
+                                                }
+                                            }
+                                            if (index == 0) {
+                                                continue;
+                                            }
+
+                                            //index = array.indexOf(".");
+                                            if (index == -1) {
                                                 break;
                                             }
-                                        }
-                                        if (index == 0) {
-                                            continue;
-                                        }
 
-                                        //index = array.indexOf(".");
-                                        if (index == -1) {
-                                            break;
-                                        }
-
-                                        s = array.substring(index - 19, index - 1);
-                                        s = s + ";" + array.substring(index, index + 10);
-                                    } catch (Exception ev) {
-                                        /*
+                                            s = array.substring(index - 19, index - 1);
+                                            s = s + ";" + array.substring(index, index + 10);
+                                        } catch (Exception ev) {
+                                            /*
                                                 getDialogBox().showDialogBox("Erro salvando item na pagina: "
                                                         + String.valueOf(p) + ", linha: " + array, "Erro: " + ev.getMessage());
                                                 frame.setVisible(false);
                                                 return;
-                                         */
-                                        break;
-                                    }
-                                    searchClient = array.substring(index + 10);
-                                    clientName = "";
-                                    for (int i = 0; i < searchClient.length(); i++) {
-                                        char c = searchClient.charAt(i);
-                                        if (Character.isDigit(c) && !clientName.isEmpty()) {
-                                            array = array.substring(index + 10 + i);
+                                             */
                                             break;
-                                        } else {
-                                            if (Character.isLetter(c)) {
-                                                clientName = clientName + c;
-                                            } else if ((Character.toString(c).equals(" ") && !clientName.isEmpty())  
-                                                    || Character.toString(c).equals("-")) {
-                                                clientName = clientName + " ";
+                                        }
+                                        searchClient = array.substring(index + 10);
+                                        clientName = "";
+                                        for (int i = 0; i < searchClient.length(); i++) {
+                                            char c = searchClient.charAt(i);
+                                            if (Character.isDigit(c) && !clientName.isEmpty()) {
+                                                array = array.substring(index + 10 + i);
+                                                break;
+                                            } else {
+                                                if (Character.isLetter(c)) {
+                                                    clientName = clientName + c;
+                                                } else if ((Character.toString(c).equals(" ") && !clientName.isEmpty())
+                                                        || Character.toString(c).equals("-")) {
+                                                    clientName = clientName + " ";
+                                                }
                                             }
                                         }
+                                        s = s + ";" + clientName + ";" + m.getKey();
+                                        if (lastResult.equals(s)) {
+                                            break;
+                                        } else {
+                                            lastResult = s;
+                                            dataToSave.add(s);
+                                        }
                                     }
-                                    s = s + ";" + clientName;
-                                    if (lastResult.equals(s)) {
-                                        break;
-                                    } else {
-                                        lastResult = s;
-                                        dataToSave.add(s);
-                                    }
+                                    progressBar.setValue(++progress);
+                                    int percentage = (int) ((double) progress / totalOfPages * 100);
+                                    label.setText(percentage + "%");
                                 }
-                                progressBar.setValue(++progress);
-                                int percentage = (int) ((double) progress / totalNoOfPages * 100);
-                                label.setText(percentage + "%");
+                                m.getValue().close();
                             }
                         } catch (IOException | TesseractException ex) {
-                            getDialogBox().showDialogBox("Erro ao gerar pdf! Erro: "
+                            getDialogBox().showDialogBox("Erro ao ler pdf! Erro: "
                                     + ex.getMessage(), "Atenção!");
+                            return;
                         }
 
                         ArrayList<Model> models = null;
@@ -289,7 +308,7 @@ public class CarsForProductionListView extends javax.swing.JInternalFrame {
                                     + " Erro: " + ex.getMessage(), "Atenção!");
                         }
 
-                        HashMap<String, ArrayList<Property>> propertiesList = new HashMap<>();
+                        ArrayList<ArrayList<Property>> propertiesList = new ArrayList<>();
                         ArrayList<Property> properties;
                         Property property;
                         for (int i = 0; i <= dataToSave.size() - 1; i++) {
@@ -305,13 +324,20 @@ public class CarsForProductionListView extends javax.swing.JInternalFrame {
                             chassis = chassis.replaceAll(" ", "");
                             chassis = chassis.replaceAll("[^A-Za-z0-9]", "");
                             chassis = chassis.replaceAll("O", "0");
+                            chassis = chassis.replaceAll("I", "1");
+                            
+                            /*
+                            try {
+                                //Checa se ja possui registro no banco
+                                if (getCarsForProductionDAO().checkRecord(chassis)) {
+                                    continue;
+                                }
+                            } catch (SQLException ex) {
+                            }
+                            */
 
                             String modelCode = chassis.substring(6, 8);
                             switch (modelCode) {
-                                case "EI":
-                                    chassis = chassis.replaceAll("EI", "E1");
-                                    modelCode = "E1";
-                                    break;
                                 case "El":
                                     chassis = chassis.replaceAll("E1", "E1");
                                     modelCode = "E1";
@@ -320,10 +346,6 @@ public class CarsForProductionListView extends javax.swing.JInternalFrame {
                                     chassis = chassis.replaceAll("Ej", "E1");
                                     modelCode = "E1";
                                     break;
-                                case "AI":
-                                    chassis = chassis.replaceAll("AI", "A1");
-                                    modelCode = "A1";
-                                    break;
                                 case "Al":
                                     chassis = chassis.replaceAll("Al", "A1");
                                     modelCode = "A1";
@@ -331,24 +353,12 @@ public class CarsForProductionListView extends javax.swing.JInternalFrame {
                                 case "Fl":
                                     chassis = chassis.replaceAll("Fl", "F1");
                                     modelCode = "F1";
-                                    break;
-                                case "FI":
-                                    chassis = chassis.replaceAll("FI", "F1");
-                                    modelCode = "F1";
-                                    break;
-                                case "CI":
-                                    chassis = chassis.replaceAll("CI", "C1");
-                                    modelCode = "C1";
-                                    break;
+                                    break;                            
                                 default:
                             }
                             
                             String manufacturerCode = chassis.substring(0, 3);
-                            switch (manufacturerCode) {
-                                case "WVI":
-                                    chassis = chassis.replaceAll("WVI", "WV1");
-                                    manufacturerCode = "WV1";
-                                    break;
+                            switch (manufacturerCode) {                                
                                 case "WVl":
                                     chassis = chassis.replaceAll("WVl", "WV1");
                                     manufacturerCode = "WV1";
@@ -366,11 +376,11 @@ public class CarsForProductionListView extends javax.swing.JInternalFrame {
                             property = new Property();
                             property.setProperty("deliveryDate",
                                     Property.PropertyType.DATE, DataEntryDate.getDateFromString(
-                                            data[1].replace(".", "/")));
+                                            data[1].trim().replace(".", "/")));
                             properties.add(property);
 
                             property = new Property();
-                            property.setProperty("clientName", Property.PropertyType.STRING, data[2]);
+                            property.setProperty("clientName", Property.PropertyType.STRING, data[2].trim());
                             properties.add(property);
 
                             property = new Property();
@@ -391,38 +401,50 @@ public class CarsForProductionListView extends javax.swing.JInternalFrame {
                             property = new Property();
                             boolean hasModel = false;
                             for (Model model : models) {
-                                if (modelCode.equals(model.getCode())) {
-                                    property.setProperty("model", Property.PropertyType.STRING, model.getName().toUpperCase());
-                                    hasModel = true;
-                                    break;
+                                if (model.getCode().contains(",")) {
+                                    String[] code = model.getCode().split(",");
+                                    if (modelCode.equals(code[0].trim())
+                                            || modelCode.equals(code[1].trim())) {
+                                        property.setProperty("model", Property.PropertyType.STRING, model.getName().toUpperCase());
+                                        hasModel = true;
+                                        break;
+                                    }
+                                } else {
+                                    if (modelCode.equals(model.getCode())) {
+                                        property.setProperty("model", Property.PropertyType.STRING, model.getName().toUpperCase());
+                                        hasModel = true;
+                                        break;
+                                    }
                                 }
+
                             }
                             if (!hasModel) {
                                 property.setProperty("model", Property.PropertyType.STRING, "");
                             }
                             properties.add(property);
-
-                            property = new Property();
-                            property.setProperty("color", Property.PropertyType.STRING, "");
-                            properties.add(property);
                             
                             property = new Property();
-                            property.setProperty("carIdentification", Property.PropertyType.STRING,
-                                    chassis.substring(chassis.length() - 6, chassis.length() - 1));
+                            property.setProperty("fileName", Property.PropertyType.STRING, data[3].trim());
                             properties.add(property);
-
-                            propertiesList.put("new" + String.valueOf(i), properties);
+                            
+                            propertiesList.add(properties);
                         }
 
                         try {
-                            getCarsForProductionDAO().saveCarForProduction(propertiesList);
+                            String message = getCarsForProductionDAO().addCarsForProduction(propertiesList);
                             loadCarsForProductionList(getCarsForProductionDAO().getCarsForProduction());
-                            getDialogBox().showDialogBox("Dados salvos com sucesso!",
-                                    "Atenção!");
                             frame.setVisible(false);
+                            if (message.isEmpty()) {
+                                getDialogBox().showDialogBox("Dados salvos com sucesso!",
+                                        "Atenção!");
+                            } else {
+                                getDialogBox().showDialogBox("Erro ao adicionar carros para produção! Erro: " + message,
+                                        "Atenção!");
+                            }                            
                         } catch (SQLException ex) {
-                            getDialogBox().showDialogBox("Erro ao salvar Fabricante! "
-                                    + "Erro: " + ex.getMessage(), "Atenção!");
+                            frame.setVisible(false);
+                            getDialogBox().showDialogBox("Erro ao salvar lista de carros para producao! "
+                                    + "Erro: " + ex.getMessage(), "Atenção!");                            
                         }
                     }).start();
                 } catch (IOException ex) {
@@ -430,7 +452,10 @@ public class CarsForProductionListView extends javax.swing.JInternalFrame {
                 }
             }
         }
-
+    }
+    
+    private void updateList() {
+        
     }
 
     private DialogBox getDialogBox() {
@@ -497,6 +522,7 @@ public class CarsForProductionListView extends javax.swing.JInternalFrame {
     }
     
     private void loadCarsForProductionList(ArrayList<CarForProduction> carsForProduction) {
+        this.carsForProduction = carsForProduction;
         DefaultTableModel model = (DefaultTableModel) listTable.getModel();
         model.setNumRows(0);
         
@@ -520,7 +546,7 @@ public class CarsForProductionListView extends javax.swing.JInternalFrame {
                 carForProduction.getClientName(),
                 carForProduction.getManufacturer(),
                 carForProduction.getModel(),
-                carForProduction.getColor()
+                carForProduction.getFileName()
             });
         }
         
@@ -546,6 +572,7 @@ public class CarsForProductionListView extends javax.swing.JInternalFrame {
         newButton = new javax.swing.JButton();
         importListButton = new javax.swing.JButton();
         totalLabel = new javax.swing.JLabel();
+        updateListButton = new javax.swing.JButton();
         jScrollPane2 = new javax.swing.JScrollPane();
         listTable = new javax.swing.JTable();
 
@@ -569,6 +596,10 @@ public class CarsForProductionListView extends javax.swing.JInternalFrame {
         totalLabel.setFont(new java.awt.Font("Arial", 1, 14)); // NOI18N
         totalLabel.setText("Total:");
 
+        updateListButton.setFont(new java.awt.Font("Arial", 0, 13)); // NOI18N
+        updateListButton.setForeground(java.awt.Color.white);
+        updateListButton.setText("Atualizar Lista");
+
         javax.swing.GroupLayout optionsPanelLayout = new javax.swing.GroupLayout(optionsPanel);
         optionsPanel.setLayout(optionsPanelLayout);
         optionsPanelLayout.setHorizontalGroup(
@@ -579,10 +610,12 @@ public class CarsForProductionListView extends javax.swing.JInternalFrame {
                 .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
                 .addComponent(editButton, javax.swing.GroupLayout.PREFERRED_SIZE, 111, javax.swing.GroupLayout.PREFERRED_SIZE)
                 .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                .addComponent(importListButton, javax.swing.GroupLayout.PREFERRED_SIZE, 191, javax.swing.GroupLayout.PREFERRED_SIZE)
-                .addGap(31, 31, 31)
+                .addComponent(importListButton, javax.swing.GroupLayout.PREFERRED_SIZE, 179, javax.swing.GroupLayout.PREFERRED_SIZE)
+                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
+                .addComponent(updateListButton, javax.swing.GroupLayout.PREFERRED_SIZE, 184, javax.swing.GroupLayout.PREFERRED_SIZE)
+                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
                 .addComponent(totalLabel)
-                .addContainerGap(696, Short.MAX_VALUE))
+                .addContainerGap(543, Short.MAX_VALUE))
         );
         optionsPanelLayout.setVerticalGroup(
             optionsPanelLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
@@ -592,7 +625,8 @@ public class CarsForProductionListView extends javax.swing.JInternalFrame {
                     .addComponent(newButton, javax.swing.GroupLayout.DEFAULT_SIZE, 35, Short.MAX_VALUE)
                     .addComponent(editButton, javax.swing.GroupLayout.PREFERRED_SIZE, 33, javax.swing.GroupLayout.PREFERRED_SIZE)
                     .addComponent(importListButton, javax.swing.GroupLayout.PREFERRED_SIZE, 33, javax.swing.GroupLayout.PREFERRED_SIZE)
-                    .addComponent(totalLabel))
+                    .addComponent(totalLabel)
+                    .addComponent(updateListButton, javax.swing.GroupLayout.PREFERRED_SIZE, 33, javax.swing.GroupLayout.PREFERRED_SIZE))
                 .addContainerGap())
         );
 
@@ -601,7 +635,7 @@ public class CarsForProductionListView extends javax.swing.JInternalFrame {
 
             },
             new String [] {
-                "Código", "Chassis", "Data de Entrega", "Cliente", "Fabricante", "Modelo", "Cor"
+                "Código", "Chassis", "Data de Entrega", "Cliente", "Fabricante", "Modelo", "Nome do Arquivo"
             }
         ) {
             boolean[] canEdit = new boolean [] {
@@ -619,10 +653,10 @@ public class CarsForProductionListView extends javax.swing.JInternalFrame {
         if (listTable.getColumnModel().getColumnCount() > 0) {
             listTable.getColumnModel().getColumn(0).setMinWidth(70);
             listTable.getColumnModel().getColumn(0).setMaxWidth(70);
-            listTable.getColumnModel().getColumn(2).setMinWidth(150);
-            listTable.getColumnModel().getColumn(2).setMaxWidth(150);
-            listTable.getColumnModel().getColumn(6).setMinWidth(100);
-            listTable.getColumnModel().getColumn(6).setMaxWidth(100);
+            listTable.getColumnModel().getColumn(2).setMinWidth(170);
+            listTable.getColumnModel().getColumn(2).setMaxWidth(170);
+            listTable.getColumnModel().getColumn(5).setMinWidth(200);
+            listTable.getColumnModel().getColumn(5).setMaxWidth(200);
         }
 
         javax.swing.GroupLayout layout = new javax.swing.GroupLayout(getContentPane());
@@ -652,5 +686,6 @@ public class CarsForProductionListView extends javax.swing.JInternalFrame {
     private javax.swing.JButton newButton;
     private javax.swing.JPanel optionsPanel;
     private javax.swing.JLabel totalLabel;
+    private javax.swing.JButton updateListButton;
     // End of variables declaration//GEN-END:variables
 }

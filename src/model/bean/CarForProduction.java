@@ -17,14 +17,14 @@ public class CarForProduction {
     Date deliveryDate = null;
     String model = null;
     String manufacturer = null;
-    String color = null;
+    String fileName = null;
 
-    public String getColor() {
-        return color;
+    public String getFileName() {
+        return fileName;
     }
 
-    public void setColor(String color) {
-        this.color = color;
+    public void setFileName(String fileName) {
+        this.fileName = fileName;
     }
 
     public String getModel() {

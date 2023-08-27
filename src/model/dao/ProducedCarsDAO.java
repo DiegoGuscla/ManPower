@@ -9,9 +9,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.Iterator;
-import java.util.Map;
 import connection.ConnectionFactory;
 import model.bean.CarForProduction;
 import model.bean.ProducedCar;
@@ -32,7 +30,7 @@ public class ProducedCarsDAO {
         /**
          * Usuário novo chave padrão no valor de 999
          */
-        Integer lastId = 0;
+        Integer lastId;
         for (int i = 0; i < propertiesList.size(); i++) {
             //ArrayList properties = propertiesList.get("new");
             stmt = con.prepareStatement("SELECT id FROM produced_cars "
@@ -141,7 +139,6 @@ public class ProducedCarsDAO {
             carForProduction = new CarForProduction();
             carForProduction.setId(rs.getInt("id"));
             carForProduction.setChassis(rs.getString("chassis"));
-            carForProduction.setColor(rs.getString("color"));
             carForProduction.setClientName(rs.getString("clientName"));
             carForProduction.setDeliveryDate(rs.getDate("deliveryDate"));
             carForProduction.setModel(rs.getString("model"));
