@@ -36,11 +36,13 @@ import model.bean.DataEntryDate;
 import model.bean.Manufacturer;
 import model.bean.Model;
 import model.bean.Property;
+import model.bean.Statics;
 import model.dao.CarsForProductionDAO;
 import model.dao.ManufacturersDAO;
 import model.dao.ModelsDAO;
 import net.sourceforge.tess4j.Tesseract;
 import net.sourceforge.tess4j.TesseractException;
+import org.apache.commons.collections4.Get;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.rendering.ImageType;
 import org.apache.pdfbox.rendering.PDFRenderer;
@@ -151,6 +153,14 @@ public class CarsForProductionListView extends javax.swing.JInternalFrame {
                 updateList();
             }                
         });
+        
+        searchButton.setBackground(Color.decode("#006E96"));
+        searchButton.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                searchChassis();
+            }                
+        });
 
         try {
             //Busca lista
@@ -160,6 +170,16 @@ public class CarsForProductionListView extends javax.swing.JInternalFrame {
                     + " Erro: " + ex.getMessage(), "Atenção!");
         }
                
+    }
+    
+    private void searchChassis() {
+        try {
+            loadCarsForProductionList(
+                    getCarsForProductionDAO().searchChassis(searchTextField.getText()));            
+        } catch (SQLException ex) {
+            getDialogBox().showDialogBox("Erro ao buscar chassis digitado, tente novamente. Erro: "
+                    + ex.getMessage(), "Atenção!");
+        }
     }
 
     private void tesseractOCR() {
@@ -455,7 +475,88 @@ public class CarsForProductionListView extends javax.swing.JInternalFrame {
     }
     
     private void updateList() {
+        ArrayList<Model> models = null;
+        try {
+            models = getModelsDAO().getModels();
+        } catch (SQLException ex) {
+            getDialogBox().showDialogBox("Erro ao buscar lista de Modelos!"
+                    + " Erro: " + ex.getMessage(), "Atenção!");
+        }
+
+        ArrayList<Manufacturer> manufacturers = null;
+        try {
+            manufacturers = getManufacturersDAO().getManufacturers();
+        } catch (SQLException ex) {
+            getDialogBox().showDialogBox("Erro ao buscar lista de Fabricantes!"
+                    + " Erro: " + ex.getMessage(), "Atenção!");
+        }
+
+        ArrayList<CarForProduction> carsToUpdate = new ArrayList<>();
+        boolean toUpdate;
+        for (CarForProduction carForProduction : carsForProduction) {
+            toUpdate = false;
+            if (carForProduction.getManufacturer().isEmpty()) {
+                for (Manufacturer manufacturer : manufacturers) {
+                    if (Statics.getManufacturerFromChassis(
+                            carForProduction.getChassis()).equals(manufacturer.getCode())) {
+                        carForProduction.setManufacturer(manufacturer.getName());
+                        toUpdate = true;
+                        break;
+                    }
+                }                
+            }
+            
+            if (carForProduction.getModel().isEmpty()) {
+                for (Model model : models) {
+                    if (Statics.getModelFromChassis(
+                            carForProduction.getChassis()).equals(model.getCode())) {
+                        carForProduction.setModel(model.getName());
+                        toUpdate = true;
+                        break;
+                    }
+                }
+            }
+            if (toUpdate)
+                carsToUpdate.add(carForProduction);
+        }
         
+        if (!carsToUpdate.isEmpty()) {
+            ArrayList<ArrayList<Property>> propertiesToSave = new ArrayList<>();
+            ArrayList<Property> properties;
+            for (CarForProduction carForProdution : carsToUpdate) {
+                properties = new ArrayList<>();
+                
+                Property property = new Property();
+                property.setProperty("id", Property.PropertyType.INTEGER, 
+                        carForProdution.getId());
+                properties.add(property);
+                
+                property = new Property();
+                property.setProperty("manufacturer", Property.PropertyType.STRING, 
+                        carForProdution.getManufacturer());
+                properties.add(property);
+                
+                property = new Property();
+                property.setProperty("model", Property.PropertyType.STRING, 
+                        carForProdution.getModel());
+                properties.add(property);
+                
+                propertiesToSave.add(properties);
+            }
+            
+            String message = getCarsForProductionDAO().updateCarsToProduction(propertiesToSave);
+            if (message.isEmpty()) {
+                try {
+                    loadCarsForProductionList(getCarsForProductionDAO().getCarsForProduction());
+                } catch (SQLException ex) {
+                    getDialogBox().showDialogBox("Erro ao buscar lista de carros para produção: Erro " 
+                            + ex.getMessage(), "Atenção!");
+                }
+                getDialogBox().showDialogBox("Lista Atualizada com Sucesso", "Atenção!");
+            } else {
+                getDialogBox().showDialogBox("Erro ao atualizar lista. Erro: " + message, "Atenção!");
+            }                
+        }        
     }
 
     private DialogBox getDialogBox() {
@@ -573,6 +674,9 @@ public class CarsForProductionListView extends javax.swing.JInternalFrame {
         importListButton = new javax.swing.JButton();
         totalLabel = new javax.swing.JLabel();
         updateListButton = new javax.swing.JButton();
+        jLabel1 = new javax.swing.JLabel();
+        searchTextField = new javax.swing.JTextField();
+        searchButton = new javax.swing.JButton();
         jScrollPane2 = new javax.swing.JScrollPane();
         listTable = new javax.swing.JTable();
 
@@ -600,6 +704,15 @@ public class CarsForProductionListView extends javax.swing.JInternalFrame {
         updateListButton.setForeground(java.awt.Color.white);
         updateListButton.setText("Atualizar Lista");
 
+        jLabel1.setFont(new java.awt.Font("Arial", 0, 14)); // NOI18N
+        jLabel1.setText("Buscar Chassis");
+
+        searchTextField.setPreferredSize(new java.awt.Dimension(80, 35));
+
+        searchButton.setFont(new java.awt.Font("Arial", 0, 13)); // NOI18N
+        searchButton.setForeground(java.awt.Color.white);
+        searchButton.setText("Buscar");
+
         javax.swing.GroupLayout optionsPanelLayout = new javax.swing.GroupLayout(optionsPanel);
         optionsPanel.setLayout(optionsPanelLayout);
         optionsPanelLayout.setHorizontalGroup(
@@ -615,18 +728,27 @@ public class CarsForProductionListView extends javax.swing.JInternalFrame {
                 .addComponent(updateListButton, javax.swing.GroupLayout.PREFERRED_SIZE, 184, javax.swing.GroupLayout.PREFERRED_SIZE)
                 .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
                 .addComponent(totalLabel)
-                .addContainerGap(543, Short.MAX_VALUE))
+                .addGap(48, 48, 48)
+                .addComponent(jLabel1)
+                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
+                .addComponent(searchTextField, javax.swing.GroupLayout.PREFERRED_SIZE, 202, javax.swing.GroupLayout.PREFERRED_SIZE)
+                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
+                .addComponent(searchButton, javax.swing.GroupLayout.PREFERRED_SIZE, 112, javax.swing.GroupLayout.PREFERRED_SIZE)
+                .addContainerGap(javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
         );
         optionsPanelLayout.setVerticalGroup(
             optionsPanelLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
             .addGroup(javax.swing.GroupLayout.Alignment.TRAILING, optionsPanelLayout.createSequentialGroup()
-                .addContainerGap()
+                .addContainerGap(javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
                 .addGroup(optionsPanelLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
-                    .addComponent(newButton, javax.swing.GroupLayout.DEFAULT_SIZE, 35, Short.MAX_VALUE)
-                    .addComponent(editButton, javax.swing.GroupLayout.PREFERRED_SIZE, 33, javax.swing.GroupLayout.PREFERRED_SIZE)
-                    .addComponent(importListButton, javax.swing.GroupLayout.PREFERRED_SIZE, 33, javax.swing.GroupLayout.PREFERRED_SIZE)
+                    .addComponent(editButton, javax.swing.GroupLayout.PREFERRED_SIZE, 36, javax.swing.GroupLayout.PREFERRED_SIZE)
+                    .addComponent(importListButton, javax.swing.GroupLayout.PREFERRED_SIZE, 36, javax.swing.GroupLayout.PREFERRED_SIZE)
                     .addComponent(totalLabel)
-                    .addComponent(updateListButton, javax.swing.GroupLayout.PREFERRED_SIZE, 33, javax.swing.GroupLayout.PREFERRED_SIZE))
+                    .addComponent(updateListButton, javax.swing.GroupLayout.PREFERRED_SIZE, 36, javax.swing.GroupLayout.PREFERRED_SIZE)
+                    .addComponent(jLabel1)
+                    .addComponent(newButton, javax.swing.GroupLayout.DEFAULT_SIZE, 36, Short.MAX_VALUE)
+                    .addComponent(searchTextField, javax.swing.GroupLayout.PREFERRED_SIZE, 36, javax.swing.GroupLayout.PREFERRED_SIZE)
+                    .addComponent(searchButton, javax.swing.GroupLayout.PREFERRED_SIZE, 36, javax.swing.GroupLayout.PREFERRED_SIZE))
                 .addContainerGap())
         );
 
@@ -663,15 +785,16 @@ public class CarsForProductionListView extends javax.swing.JInternalFrame {
         getContentPane().setLayout(layout);
         layout.setHorizontalGroup(
             layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-            .addComponent(optionsPanel, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+            .addGroup(layout.createSequentialGroup()
+                .addComponent(optionsPanel, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+                .addGap(108, 108, 108))
             .addComponent(jScrollPane2)
         );
         layout.setVerticalGroup(
             layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
             .addGroup(layout.createSequentialGroup()
                 .addComponent(optionsPanel, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
-                .addGap(0, 0, 0)
-                .addComponent(jScrollPane2, javax.swing.GroupLayout.DEFAULT_SIZE, 519, Short.MAX_VALUE))
+                .addComponent(jScrollPane2, javax.swing.GroupLayout.DEFAULT_SIZE, 517, Short.MAX_VALUE))
         );
 
         pack();
@@ -681,10 +804,13 @@ public class CarsForProductionListView extends javax.swing.JInternalFrame {
     // Variables declaration - do not modify//GEN-BEGIN:variables
     private javax.swing.JButton editButton;
     private javax.swing.JButton importListButton;
+    private javax.swing.JLabel jLabel1;
     private javax.swing.JScrollPane jScrollPane2;
     private javax.swing.JTable listTable;
     private javax.swing.JButton newButton;
     private javax.swing.JPanel optionsPanel;
+    private javax.swing.JButton searchButton;
+    private javax.swing.JTextField searchTextField;
     private javax.swing.JLabel totalLabel;
     private javax.swing.JButton updateListButton;
     // End of variables declaration//GEN-END:variables

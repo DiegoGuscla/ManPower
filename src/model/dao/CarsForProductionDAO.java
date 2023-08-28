@@ -250,6 +250,99 @@ public class CarsForProductionDAO {
     }
     */
     
+    public String updateCarsToProduction(ArrayList<ArrayList<Property>> propertiesToSave) {
+        Connection con = ConnectionFactory.getConnection();
+        PreparedStatement stmt = null;
+
+        for (ArrayList<Property> properties : propertiesToSave) {
+            String sql = "UPDATE cars_for_production SET ";
+
+            try {
+                int id = 0;
+                for (int i = 0; i < properties.size(); i++) {
+                    property = properties.get(i);
+                    if (property.getName().equals("id")) {
+                        id = property.getIntValue();
+                        continue;
+                    }
+                    sql = sql + property.getName() + "=?";
+
+                    if (i + 1 < properties.size()) {
+                        sql = sql + ", ";
+                    }
+                }
+
+                sql = sql + " WHERE id=?";
+
+                stmt = con.prepareStatement(sql);
+
+                int count = 1;
+                for (int i = 0; i < properties.size(); i++) {
+                    property = properties.get(i);
+                    
+                    if (property.getName().equals("id"))
+                        continue;
+                    
+                    switch (property.getType()) {
+                        case STRING:
+                            stmt.setString(count, property.getStringValue());
+                            break;
+                        case INTEGER:
+                            stmt.setInt(count, property.getIntValue());
+                            break;
+                        case DATE:
+                            stmt.setDate(count, property.getDateValue());
+                            break;
+                        case DOUBLE:
+                            stmt.setDouble(count, property.getDoubleValue());
+                            break;
+                        case TIME:
+                            stmt.setTime(count, property.getTimeValue());
+                            break;
+                        default:
+                            stmt.setBoolean(count, property.getBooleanValue());
+                            break;
+                    }
+                    count++;
+                }
+                stmt.setInt(count,id);
+                stmt.executeUpdate();
+            } catch (SQLException ex) {
+                ConnectionFactory.closeConnection(con, stmt);
+                return "Erro atualizando informações dos carros: " + ex.getMessage();
+            }
+        }
+        ConnectionFactory.closeConnection(con, stmt);
+        return "";
+    }
+    
+    public ArrayList<CarForProduction> searchChassis(String chassisToSearch) throws SQLException {
+        if (chassisToSearch.isEmpty()) {
+            return getCarsForProduction();
+        }
+        
+        Connection con = ConnectionFactory.getConnection();
+        PreparedStatement stmt;
+        stmt = con.prepareStatement("SELECT id, chassis, clientName, deliveryDate, model, manufacturer, fileName "
+                + "FROM cars_for_production WHERE chassis LIKE ?");
+        stmt.setString(1, "%".concat(chassisToSearch).concat("%"));
+        ResultSet rs = stmt.executeQuery();
+        ArrayList<CarForProduction> carsForProduction = new ArrayList<>();
+        while (rs.next()) {
+            CarForProduction carForProduction = new CarForProduction();
+            carForProduction.setId(rs.getInt("id"));
+            carForProduction.setChassis(rs.getString("chassis"));
+            carForProduction.setClientName(rs.getString("clientName"));
+            carForProduction.setDeliveryDate(rs.getDate("deliveryDate"));
+            carForProduction.setModel(rs.getString("model"));
+            carForProduction.setManufacturer(rs.getString("manufacturer"));
+            carForProduction.setFileName(rs.getString("fileName"));
+            carsForProduction.add(carForProduction);
+        }
+        ConnectionFactory.closeConnection(con, stmt, rs);
+        return carsForProduction;
+    }
+
     public String addCarsForProduction(ArrayList<ArrayList<Property>> propertiesList) {
         Connection con = ConnectionFactory.getConnection();
         PreparedStatement stmt = null;
@@ -257,7 +350,7 @@ public class CarsForProductionDAO {
         String message = "";
         for (int i = 0; i < propertiesList.size(); i++) {
             ArrayList properties = propertiesList.get(i);
-            message = addCarForProduction(properties, con, stmt);
+            message = message + addCarForProduction(properties, con, stmt);
         }
         if (message.contains(";")) {
             message = "Os seguintes registros estao duplicados na lista: " + message.replaceAll(";", " ");
@@ -330,7 +423,7 @@ public class CarsForProductionDAO {
             if (ex instanceof SQLIntegrityConstraintViolationException) {
                 return "; " + property.getStringValue();
             } else {
-                return "Erro ao salvar propriedades: " + ex.getMessage();
+                return "Erro ao salvar propriedades: " + ex.getMessage() + " / ";
             }
         }
         return "";

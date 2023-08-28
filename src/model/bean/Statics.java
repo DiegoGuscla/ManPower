@@ -10,4 +10,12 @@ package model.bean;
  */
 public class Statics {
     public static final boolean ACTIVE = true;
+    
+    public static final String getManufacturerFromChassis(String chassis) {
+        return chassis.length() == 17 ? chassis.substring(0, 3) : "";
+    }
+    
+    public static final String getModelFromChassis(String chassis) {
+        return chassis.length() == 17 ? chassis.substring(6, 8) : "";
+    }
 }
